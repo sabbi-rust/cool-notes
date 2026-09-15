@@ -287,7 +287,7 @@
   let dragging = null;      // {id, offX, offY}
   let resizing = null;      // {id, startW, startH, startX, startY}
   let idCounter = 1;
-  let activeTlacuacha = null; // {gifImg, canvas, purr, reload} for whichever one is currently held
+  let activeHold = null; // { onStop } for whichever hold-to-play utility note is currently pressed
 
   const el = {
     viewport: document.getElementById('viewport'),
@@ -313,7 +313,8 @@
     mouth: { label: '👄', asset: 'res/mouth.gif' },
     roulette: { label: 'Roulette' }, // stateful — rendered and driven specially, see below
     ouyea: { label: 'ou yea', asset: 'res/pn.gif' }, // also drives global keypress sounds, see below
-    tlacuacha: { label: 'tlacuacha' } // press-and-hold gif, rendered specially, see below
+    tlacuacha: { label: 'tlacuacha' }, // press-and-hold gif, rendered specially, see below
+    nrcstcrcss: { label: 'nrcstcrcss' } // press-and-hold gif swap, rendered specially, see below
   };
 
   const ROULETTE_ASSETS = {
@@ -399,24 +400,57 @@
       canvas.style.display = 'none';
       purr.currentTime = 0;
       purr.play().catch(()=>{});
-      activeTlacuacha = { gifImg, canvas, purr, reload: loadStill, onStop: ()=>{ holding = false; } };
+      activeHold = { onStop: ()=>{
+        holding = false;
+        gifImg.style.display = 'none';
+        canvas.style.display = 'block';
+        purr.pause();
+        purr.currentTime = 0;
+        loadStill(); // restart the gif from frame one next time it's held
+      }};
     }
 
     canvas.addEventListener('mousedown', (e)=>{ e.preventDefault(); startPlay(); });
   }
 
-  function stopActiveTlacuacha(){
-    if(!activeTlacuacha) return;
-    const { gifImg, canvas, purr, reload, onStop } = activeTlacuacha;
-    gifImg.style.display = 'none';
-    canvas.style.display = 'block';
-    purr.pause();
-    purr.currentTime = 0;
-    reload(); // restart the gif from frame one next time it's held
-    onStop();
-    activeTlacuacha = null;
+  // "nrcstcrcss" — shows bun1.gif at rest; while held, swaps to bun2.gif and
+  // loops a sound. Simpler than tlacuacha: both states are just plain gifs.
+  function buildNrcstcrcssBody(body){
+    const img = document.createElement('img');
+    img.draggable = false;
+    img.src = 'res/bun1.gif';
+    body.style.cursor = 'pointer';
+    body.style.userSelect = 'none';
+    body.appendChild(img);
+
+    const neuro = new Audio('res/neuro.mp3');
+    neuro.loop = true;
+
+    let holding = false;
+    function startPlay(){
+      if(holding) return;
+      holding = true;
+      img.src = 'res/bun2.gif';
+      neuro.currentTime = 0;
+      neuro.play().catch(()=>{});
+      activeHold = { onStop: ()=>{
+        holding = false;
+        img.src = 'res/bun1.gif';
+        neuro.pause();
+        neuro.currentTime = 0;
+      }};
+    }
+
+    body.addEventListener('mousedown', (e)=>{ e.preventDefault(); startPlay(); });
   }
-  window.addEventListener('mouseup', stopActiveTlacuacha);
+
+  function stopActiveHold(){
+    if(!activeHold) return;
+    const { onStop } = activeHold;
+    activeHold = null;
+    onStop();
+  }
+  window.addEventListener('mouseup', stopActiveHold);
 
   function showStatus(msg, isError){
     el.status.textContent = msg;
@@ -590,6 +624,8 @@
 
         if(note.utilityType === 'tlacuacha'){
           buildTlacuachaBody(body);
+        } else if(note.utilityType === 'nrcstcrcss'){
+          buildNrcstcrcssBody(body);
         } else {
           const img = document.createElement('img');
           img.draggable = false;
