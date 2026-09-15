@@ -250,7 +250,7 @@
   </div>
   <div class="sep"></div>
   <div style="position:relative;">
-    <button class="btn" id="btn-add-utility" title="Add a utility note">+</button>
+    <button class="btn primary" id="btn-add-utility" title="Add a utility note">+</button>
     <div class="util-menu" id="util-menu"></div>
   </div>
   <span id="status"></span>
@@ -287,6 +287,7 @@
   let dragging = null;      // {id, offX, offY}
   let resizing = null;      // {id, startW, startH, startX, startY}
   let idCounter = 1;
+  let activeTlacuacha = null; // {gifImg, canvas, purr, reload} for whichever one is currently held
 
   const el = {
     viewport: document.getElementById('viewport'),
@@ -311,7 +312,8 @@
     i: { label: 'i', asset: 'res/i.gif' },
     mouth: { label: '👄', asset: 'res/mouth.gif' },
     roulette: { label: 'Roulette' }, // stateful — rendered and driven specially, see below
-    ouyea: { label: 'ou yea', asset: 'res/pn.gif' } // also drives global keypress sounds, see below
+    ouyea: { label: 'ou yea', asset: 'res/pn.gif' }, // also drives global keypress sounds, see below
+    tlacuacha: { label: 'tlacuacha' } // press-and-hold gif, rendered specially, see below
   };
 
   const ROULETTE_ASSETS = {
@@ -347,6 +349,74 @@
   }
 
   function uid(){ return 'n' + (idCounter++) + '-' + Math.random().toString(36).slice(2,7); }
+
+  // "tlacuacha" — a gif that only animates while the mouse is held down on it.
+  // A canvas shows a frozen frame at rest; the real (animated) gif swaps in on
+  // press and swaps back out on release, with a looping purr underneath.
+  function buildTlacuachaBody(body){
+    body.style.position = 'relative';
+
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.display = 'block';
+    canvas.style.borderRadius = '8px';
+    canvas.style.cursor = 'pointer';
+    canvas.style.userSelect = 'none';
+    body.appendChild(canvas);
+
+    const gifImg = document.createElement('img');
+    gifImg.draggable = false;
+    gifImg.style.position = 'absolute';
+    gifImg.style.inset = '0';
+    gifImg.style.width = '100%';
+    gifImg.style.height = '100%';
+    gifImg.style.objectFit = 'cover';
+    gifImg.style.borderRadius = '8px';
+    gifImg.style.display = 'none';
+    body.appendChild(gifImg);
+
+    const purr = new Audio('res/purr.mp3');
+    purr.loop = true;
+
+    function captureFrame(){
+      const w = canvas.clientWidth || 160, h = canvas.clientHeight || 160;
+      canvas.width = w; canvas.height = h;
+      try{ canvas.getContext('2d').drawImage(gifImg, 0, 0, w, h); }catch(err){ /* not ready yet */ }
+    }
+    function loadStill(){
+      gifImg.onload = captureFrame;
+      gifImg.src = 'res/cat.gif';
+      if(gifImg.complete) captureFrame();
+    }
+    loadStill();
+
+    let holding = false;
+    function startPlay(){
+      if(holding) return;
+      holding = true;
+      gifImg.style.display = 'block';
+      canvas.style.display = 'none';
+      purr.currentTime = 0;
+      purr.play().catch(()=>{});
+      activeTlacuacha = { gifImg, canvas, purr, reload: loadStill, onStop: ()=>{ holding = false; } };
+    }
+
+    canvas.addEventListener('mousedown', (e)=>{ e.preventDefault(); startPlay(); });
+  }
+
+  function stopActiveTlacuacha(){
+    if(!activeTlacuacha) return;
+    const { gifImg, canvas, purr, reload, onStop } = activeTlacuacha;
+    gifImg.style.display = 'none';
+    canvas.style.display = 'block';
+    purr.pause();
+    purr.currentTime = 0;
+    reload(); // restart the gif from frame one next time it's held
+    onStop();
+    activeTlacuacha = null;
+  }
+  window.addEventListener('mouseup', stopActiveTlacuacha);
 
   function showStatus(msg, isError){
     el.status.textContent = msg;
@@ -517,20 +587,25 @@
 
       if(isUtility){
         body.className = 'note-body-utility';
-        const img = document.createElement('img');
-        img.draggable = false;
 
-        if(note.utilityType === 'roulette'){
-          img.src = ROULETTE_ASSETS[note.rouletteState] || ROULETTE_ASSETS.normal;
-          if(note.rouletteState === 'normal'){
-            img.style.pointerEvents = 'auto';
-            img.style.cursor = 'pointer';
-            img.addEventListener('click', (e)=>{ e.stopPropagation(); triggerRoulette(note); });
-          }
+        if(note.utilityType === 'tlacuacha'){
+          buildTlacuachaBody(body);
         } else {
-          img.src = UTILITY_TYPES[note.utilityType] ? UTILITY_TYPES[note.utilityType].asset : '';
+          const img = document.createElement('img');
+          img.draggable = false;
+
+          if(note.utilityType === 'roulette'){
+            img.src = ROULETTE_ASSETS[note.rouletteState] || ROULETTE_ASSETS.normal;
+            if(note.rouletteState === 'normal'){
+              img.style.pointerEvents = 'auto';
+              img.style.cursor = 'pointer';
+              img.addEventListener('click', (e)=>{ e.stopPropagation(); triggerRoulette(note); });
+            }
+          } else {
+            img.src = UTILITY_TYPES[note.utilityType] ? UTILITY_TYPES[note.utilityType].asset : '';
+          }
+          body.appendChild(img);
         }
-        body.appendChild(img);
       } else {
         body.className = 'note-body';
 
