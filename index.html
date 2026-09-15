@@ -18,6 +18,7 @@
     --accent-dim: #7a2f5c;
     --danger: #d97a6a;
     --note-header: rgba(0,0,0,0.12);
+    --toolbar-h: 56px;
   }
   *{box-sizing:border-box;}
   html,body{height:100%;margin:0;font-family:'Inter',system-ui,sans-serif;color:var(--ink);}
@@ -25,9 +26,9 @@
 
   /* ---------- Toolbar ---------- */
   #toolbar{
-    height:56px; display:flex; align-items:center; gap:10px;
+    min-height:56px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
     background:var(--toolbar-bg); border-bottom:1px solid var(--toolbar-border);
-    padding:0 16px; position:relative; z-index:50;
+    padding:8px 16px; position:relative; z-index:50;
   }
   #toolbar h1{
     font-family:'Caveat',cursive; font-size:26px; font-weight:700; margin:0 14px 0 0;
@@ -62,14 +63,15 @@
   #status.show{opacity:1;}
 
   #link-banner{
-    position:fixed; top:64px; left:50%; transform:translateX(-50%);
+    position:fixed; top:calc(var(--toolbar-h) + 8px); left:50%; transform:translateX(-50%);
     background:var(--accent); color:#fff; padding:8px 16px; border-radius:8px;
     font-weight:600; font-size:13.5px; z-index:200; display:none; box-shadow:0 4px 14px rgba(0,0,0,.35);
+    max-width:90vw; text-align:center;
   }
 
   /* ---------- Canvas ---------- */
   #viewport{
-    position:absolute; top:56px; left:0; right:0; bottom:0;
+    position:absolute; top:var(--toolbar-h); left:0; right:0; bottom:0;
     overflow:auto; background-color:transparent;
     background-image: radial-gradient(var(--canvas-dot) 1.4px, transparent 1.4px);
     background-size: 26px 26px;
@@ -86,7 +88,7 @@
   .note.linking-target{ outline:2px dashed #251a0c; cursor:crosshair; }
   .note-header{
     background:var(--note-header); padding:6px 8px; display:flex; align-items:center; gap:6px;
-    cursor:grab; user-select:none; flex-shrink:0;
+    cursor:grab; user-select:none; flex-shrink:0; touch-action:none;
   }
   .note-header:active{cursor:grabbing;}
   .note-title{
@@ -114,7 +116,8 @@
   .note-image-tools .btn{ padding:3px 8px; font-size:11.5px; background:rgba(0,0,0,.1); border:none; color:#20180d;}
   .note-image-tools .btn:hover{background:rgba(0,0,0,.2);}
   .note-resize{
-    position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; z-index:6;
+    position:absolute; right:0; bottom:0; width:22px; height:22px; cursor:nwse-resize; z-index:6;
+    touch-action:none;
   }
   .note-resize svg{ display:block; }
   .note.minimized .note-body, .note.minimized .note-resize{ display:none; }
@@ -136,7 +139,7 @@
 
   /* ---------- Background image ---------- */
   #bg-layer{
-    position:fixed; top:56px; left:0; right:0; bottom:0; z-index:0;
+    position:fixed; top:var(--toolbar-h); left:0; right:0; bottom:0; z-index:0;
     background-color:var(--canvas-bg); overflow:hidden;
   }
   #bg-image{
@@ -180,6 +183,12 @@
     z-index:200;
   }
   #info-wrap:hover #info-tooltip{ opacity:1; transform:translateY(0); }
+  #info-tooltip.show-tap{ opacity:1; transform:translateY(0); pointer-events:auto; }
+
+  /* ---------- Volume ---------- */
+  #volume-wrap{ display:flex; align-items:center; gap:6px; margin-left:6px; }
+  #volume-icon{ font-size:15px; }
+  #volume-slider{ width:90px; accent-color:var(--accent); cursor:pointer; }
 
   /* ---------- Utility note menu ---------- */
   .util-menu{
@@ -258,6 +267,10 @@
     <button id="btn-info" title="">i</button>
     <div id="info-tooltip">buenas notas. exporta tu json para asegurarte de no perder tu trabajo. hecho a las malas, no me importa si no funciona. tqm -sabbii</div>
   </div>
+  <div id="volume-wrap">
+    <span id="volume-icon">🔊</span>
+    <input type="range" id="volume-slider" min="0" max="100" value="80" title="Sound volume">
+  </div>
 </div>
 
 <div id="link-banner">Click the note that should become the child — Esc to cancel</div>
@@ -305,6 +318,8 @@
     bgPresets: document.getElementById('bg-presets'),
     bgOpacity: document.getElementById('bg-opacity'),
     utilMenu: document.getElementById('util-menu'),
+    infoTooltip: document.getElementById('info-tooltip'),
+    volumeSlider: document.getElementById('volume-slider'),
   };
 
   // Registry of utility note kinds — add more here later.
@@ -325,8 +340,38 @@
   };
   const ROULETTE_SOUNDS = { dry: 'res/rr_dry.mp3', wet: 'res/rr_wet.mp3' };
 
+  // ---------- Master volume ----------
+  // Every sound effect on the site is created through makeAudio() so this one
+  // slider controls all of them, including the ones already mid-loop.
+  let masterVolume = 0.8;
+  let allAudios = [];
+
+  function makeAudio(src, loop){
+    const a = new Audio(src);
+    if(loop) a.loop = true;
+    a.volume = masterVolume;
+    allAudios.push(a);
+    if(!loop){
+      a.addEventListener('ended', ()=>{ allAudios = allAudios.filter(x => x !== a); });
+    }
+    return a;
+  }
+
+  function setMasterVolume(v){
+    masterVolume = Math.max(0, Math.min(1, v));
+    allAudios.forEach(a => { a.volume = masterVolume; });
+    try{ localStorage.setItem('corkboard:volume', String(masterVolume)); }catch(err){ /* ignore */ }
+  }
+
+  function loadMasterVolume(){
+    try{
+      const raw = localStorage.getItem('corkboard:volume');
+      if(raw !== null) masterVolume = Math.max(0, Math.min(1, Number(raw)));
+    }catch(err){ /* ignore, use default */ }
+  }
+
   function playSound(src){
-    try{ const a = new Audio(src); a.play().catch(()=>{}); }catch(err){ /* ignore */ }
+    try{ const a = makeAudio(src); a.play().catch(()=>{}); }catch(err){ /* ignore */ }
   }
 
   function triggerRoulette(note){
@@ -364,6 +409,7 @@
     canvas.style.borderRadius = '8px';
     canvas.style.cursor = 'pointer';
     canvas.style.userSelect = 'none';
+    canvas.style.touchAction = 'none';
     body.appendChild(canvas);
 
     const gifImg = document.createElement('img');
@@ -377,8 +423,7 @@
     gifImg.style.display = 'none';
     body.appendChild(gifImg);
 
-    const purr = new Audio('res/purr.mp3');
-    purr.loop = true;
+    const purr = makeAudio('res/purr.mp3', true);
 
     function captureFrame(){
       const w = canvas.clientWidth || 160, h = canvas.clientHeight || 160;
@@ -410,7 +455,7 @@
       }};
     }
 
-    canvas.addEventListener('mousedown', (e)=>{ e.preventDefault(); startPlay(); });
+    canvas.addEventListener('pointerdown', (e)=>{ e.preventDefault(); startPlay(); });
   }
 
   // "nrcstcrcss" — shows bun1.gif at rest; while held, swaps to bun2.gif and
@@ -421,10 +466,10 @@
     img.src = 'res/bun1.gif';
     body.style.cursor = 'pointer';
     body.style.userSelect = 'none';
+    body.style.touchAction = 'none';
     body.appendChild(img);
 
-    const neuro = new Audio('res/neuro.mp3');
-    neuro.loop = true;
+    const neuro = makeAudio('res/neuro.mp3', true);
 
     let holding = false;
     function startPlay(){
@@ -441,7 +486,7 @@
       }};
     }
 
-    body.addEventListener('mousedown', (e)=>{ e.preventDefault(); startPlay(); });
+    body.addEventListener('pointerdown', (e)=>{ e.preventDefault(); startPlay(); });
   }
 
   function stopActiveHold(){
@@ -450,7 +495,7 @@
     activeHold = null;
     onStop();
   }
-  window.addEventListener('mouseup', stopActiveHold);
+  window.addEventListener('pointerup', stopActiveHold);
 
   function showStatus(msg, isError){
     el.status.textContent = msg;
@@ -550,7 +595,7 @@
       title.type = 'text';
       title.placeholder = 'Untitled note';
       title.value = note.title;
-      title.addEventListener('mousedown', e=> e.stopPropagation());
+      title.addEventListener('pointerdown', e=> e.stopPropagation());
       title.addEventListener('change', ()=>{ note.title = title.value; });
     }
 
@@ -558,35 +603,35 @@
     colorBtn.className = 'note-icon-btn';
     colorBtn.title = 'Recolor';
     colorBtn.textContent = '●';
-    colorBtn.addEventListener('mousedown', e=>e.stopPropagation());
+    colorBtn.addEventListener('pointerdown', e=>e.stopPropagation());
     colorBtn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleColorMenu(note, wrap, colorBtn); });
 
     const linkBtn = document.createElement('button');
     linkBtn.className = 'note-icon-btn' + (linkSourceId === note.id && linkMode === 'parent' ? ' active' : '');
     linkBtn.title = 'Link to a child note';
     linkBtn.textContent = '↗';
-    linkBtn.addEventListener('mousedown', e=>e.stopPropagation());
+    linkBtn.addEventListener('pointerdown', e=>e.stopPropagation());
     linkBtn.addEventListener('click', (e)=>{ e.stopPropagation(); startLinking(note.id, 'parent'); });
 
     const neutralLinkBtn = document.createElement('button');
     neutralLinkBtn.className = 'note-icon-btn' + (linkSourceId === note.id && linkMode === 'neutral' ? ' active' : '');
     neutralLinkBtn.title = 'Link to another note (no hierarchy)';
     neutralLinkBtn.textContent = '⇄';
-    neutralLinkBtn.addEventListener('mousedown', e=>e.stopPropagation());
+    neutralLinkBtn.addEventListener('pointerdown', e=>e.stopPropagation());
     neutralLinkBtn.addEventListener('click', (e)=>{ e.stopPropagation(); startLinking(note.id, 'neutral'); });
 
     const minBtn = document.createElement('button');
     minBtn.className = 'note-icon-btn';
     minBtn.title = note.minimized ? 'Restore' : 'Minimize';
     minBtn.textContent = note.minimized ? '▢' : '—';
-    minBtn.addEventListener('mousedown', e=>e.stopPropagation());
+    minBtn.addEventListener('pointerdown', e=>e.stopPropagation());
     minBtn.addEventListener('click', (e)=>{ e.stopPropagation(); note.minimized = !note.minimized; render(); });
 
     const delBtn = document.createElement('button');
     delBtn.className = 'note-icon-btn';
     delBtn.title = 'Delete';
     delBtn.textContent = '×';
-    delBtn.addEventListener('mousedown', e=>e.stopPropagation());
+    delBtn.addEventListener('pointerdown', e=>e.stopPropagation());
     delBtn.addEventListener('click', (e)=>{ e.stopPropagation(); deleteNote(note.id); });
 
     header.appendChild(title);
@@ -604,7 +649,7 @@
       const sw = document.createElement('div');
       sw.className = 'swatch';
       sw.style.background = COLORS[key];
-      sw.addEventListener('mousedown', e=>e.stopPropagation());
+      sw.addEventListener('pointerdown', e=>e.stopPropagation());
       sw.addEventListener('click', (e)=>{
         e.stopPropagation();
         note.color = COLORS[key];
@@ -654,7 +699,7 @@
           const removeImgBtn = document.createElement('button');
           removeImgBtn.className = 'btn';
           removeImgBtn.textContent = 'Remove image';
-          removeImgBtn.addEventListener('mousedown', e=>e.stopPropagation());
+          removeImgBtn.addEventListener('pointerdown', e=>e.stopPropagation());
           removeImgBtn.addEventListener('click', (e)=>{ e.stopPropagation(); note.image=null; render(); });
           tools.appendChild(removeImgBtn);
           body.appendChild(tools);
@@ -664,7 +709,7 @@
           const addImgBtn = document.createElement('button');
           addImgBtn.className = 'btn';
           addImgBtn.textContent = '🖼 Add image';
-          addImgBtn.addEventListener('mousedown', e=>e.stopPropagation());
+          addImgBtn.addEventListener('pointerdown', e=>e.stopPropagation());
           addImgBtn.addEventListener('click', (e)=>{ e.stopPropagation(); pickImage(note); });
           tools.appendChild(addImgBtn);
           body.appendChild(tools);
@@ -673,7 +718,7 @@
         const textarea = document.createElement('textarea');
         textarea.placeholder = 'Write something…';
         textarea.value = note.text || '';
-        textarea.addEventListener('mousedown', e=>e.stopPropagation());
+        textarea.addEventListener('pointerdown', e=>e.stopPropagation());
         textarea.addEventListener('change', ()=>{ note.text = textarea.value; });
         body.appendChild(textarea);
       }
@@ -683,16 +728,16 @@
       const resize = document.createElement('div');
       resize.className = 'note-resize';
       resize.innerHTML = '<svg width="16" height="16"><path d="M14 2 L2 14 M14 8 L8 14" stroke="#20180d55" stroke-width="1.5"/></svg>';
-      resize.addEventListener('mousedown', (e)=> startResize(e, note));
+      resize.addEventListener('pointerdown', (e)=> startResize(e, note));
       wrap.appendChild(resize);
     }
 
-    header.addEventListener('mousedown', (e)=>{
+    header.addEventListener('pointerdown', (e)=>{
       if(e.target !== header) return; // only drag from empty header area
       startDrag(e, note);
     });
 
-    wrap.addEventListener('mousedown', ()=> bringToFront(note));
+    wrap.addEventListener('pointerdown', ()=> bringToFront(note));
 
     wrap.addEventListener('click', (e)=>{
       if(linkSourceId && linkSourceId !== note.id){
@@ -812,7 +857,7 @@
     };
   }
 
-  window.addEventListener('mousemove', (e)=>{
+  window.addEventListener('pointermove', (e)=>{
     if(dragging){
       const note = getById(dragging.id);
       if(!note) return;
@@ -841,7 +886,7 @@
     }
   });
 
-  window.addEventListener('mouseup', ()=>{
+  window.addEventListener('pointerup', ()=>{
     dragging = null;
     resizing = null;
   });
@@ -1327,18 +1372,40 @@
     }
   });
 
-  window.addEventListener('resize', updateCanvasBounds);
+  function syncToolbarHeight(){
+    const h = document.getElementById('toolbar').offsetHeight;
+    document.documentElement.style.setProperty('--toolbar-h', h + 'px');
+    updateCanvasBounds();
+  }
+  window.addEventListener('resize', syncToolbarHeight);
+  if(window.ResizeObserver){
+    new ResizeObserver(syncToolbarHeight).observe(document.getElementById('toolbar'));
+  }
 
   buildBackgroundPanel();
   loadBackgroundSetting();
   refreshBoardList();
   render();
+  syncToolbarHeight();
+
+  // ---------- Volume ----------
+  loadMasterVolume();
+  el.volumeSlider.value = Math.round(masterVolume * 100);
+  el.volumeSlider.addEventListener('input', ()=>{
+    setMasterVolume(Number(el.volumeSlider.value) / 100);
+  });
 
   // ---------- Info button ----------
-  const infoSound = new Audio('res/sound1.mp3');
+  const infoSound = makeAudio('res/sound1.mp3');
   document.getElementById('btn-info').addEventListener('click', ()=>{
     infoSound.currentTime = 0;
     infoSound.play().catch(()=>{ /* browser may block autoplay-like sounds without prior interaction */ });
+    el.infoTooltip.classList.toggle('show-tap');
+  });
+  document.addEventListener('click', (e)=>{
+    if(!e.target.closest('#info-wrap')){
+      el.infoTooltip.classList.remove('show-tap');
+    }
   });
 })();
 </script>
