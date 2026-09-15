@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cool notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canvas-bg: #202b33;
+    --canvas-dot: #2b3944;
+    --toolbar-bg: #141c22;
+    --toolbar-border: #263039;
+    --ink: #EDEAE1;
+    --ink-dim: #9AA7AE;
+    --accent: #ff1c60;
+    --accent-dim: #7a2f5c;
+    --danger: #d97a6a;
+    --note-header: rgba(0,0,0,0.12);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;font-family:'Inter',system-ui,sans-serif;color:var(--ink);}
+  body{overflow:hidden; background:var(--toolbar-bg);}
+
+  /* ---------- Toolbar ---------- */
+  #toolbar{
+    height:56px; display:flex; align-items:center; gap:10px;
+    background:var(--toolbar-bg); border-bottom:1px solid var(--toolbar-border);
+    padding:0 16px; position:relative; z-index:50;
+  }
+  #toolbar h1{
+    font-family:'Caveat',cursive; font-size:26px; font-weight:700; margin:0 14px 0 0;
+    color:var(--accent); white-space:nowrap;
+  }
+  .sep{width:1px; height:26px; background:var(--toolbar-border); margin:0 6px;}
+  button, select, input[type=text]{
+    font-family:'Inter',system-ui,sans-serif; font-size:13.5px;
+  }
+  .btn{
+    background:#26333c; color:var(--ink); border:1px solid var(--toolbar-border);
+    padding:7px 12px; border-radius:7px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+    transition:background .12s ease, border-color .12s ease;
+  }
+  .btn:hover{background:#31414c; border-color:#3a4750;}
+  .btn.primary{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600;}
+  .btn.primary:hover{background:#e074b6;}
+  .btn.danger{color:var(--danger);}
+  .btn:disabled{opacity:.4; cursor:not-allowed;}
+  #board-name{
+    background:#26333c; border:1px solid var(--toolbar-border); color:var(--ink);
+    padding:7px 10px; border-radius:7px; width:160px;
+  }
+  #board-select{
+    background:#26333c; border:1px solid var(--toolbar-border); color:var(--ink);
+    padding:7px 8px; border-radius:7px; max-width:160px;
+  }
+  #status{
+    font-size:12.5px; color:var(--ink-dim); white-space:nowrap;
+    opacity:0; transition:opacity .3s ease;
+  }
+  #status.show{opacity:1;}
+
+  #link-banner{
+    position:fixed; top:64px; left:50%; transform:translateX(-50%);
+    background:var(--accent); color:#fff; padding:8px 16px; border-radius:8px;
+    font-weight:600; font-size:13.5px; z-index:200; display:none; box-shadow:0 4px 14px rgba(0,0,0,.35);
+  }
+
+  /* ---------- Canvas ---------- */
+  #viewport{
+    position:absolute; top:56px; left:0; right:0; bottom:0;
+    overflow:auto; background-color:transparent;
+    background-image: radial-gradient(var(--canvas-dot) 1.4px, transparent 1.4px);
+    background-size: 26px 26px;
+  }
+  #canvas-inner{ position:relative; }
+  #arrow-svg{ position:absolute; top:0; left:0; pointer-events:none; z-index:1; }
+
+  /* ---------- Notes ---------- */
+  .note{
+    position:absolute; z-index:5; display:flex; flex-direction:column;
+    border-radius:4px; box-shadow:0 6px 16px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.15) inset;
+    min-width:150px; min-height:44px; overflow:hidden;
+  }
+  .note.linking-target{ outline:2px dashed #251a0c; cursor:crosshair; }
+  .note-header{
+    background:var(--note-header); padding:6px 8px; display:flex; align-items:center; gap:6px;
+    cursor:grab; user-select:none; flex-shrink:0;
+  }
+  .note-header:active{cursor:grabbing;}
+  .note-title{
+    font-family:'Caveat',cursive; font-size:19px; font-weight:700; color:#20180d;
+    flex:1; background:transparent; border:none; outline:none; min-width:0;
+  }
+  .note-title::placeholder{color:#20180d99;}
+  .note-icon-btn{
+    width:22px; height:22px; border:none; background:rgba(0,0,0,.08); border-radius:5px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; color:#20180d;
+    flex-shrink:0; font-size:12px; line-height:1; padding:0;
+  }
+  .note-icon-btn:hover{background:rgba(0,0,0,.18);}
+  .note-icon-btn.active{background:#20180d; color:#fff;}
+  .note-body{
+    flex:1; display:flex; flex-direction:column; padding:8px; gap:6px; overflow:auto; min-height:0;
+  }
+  .note-body textarea{
+    flex:1; resize:none; border:none; outline:none; background:transparent;
+    font-family:'Inter',system-ui,sans-serif; font-size:13.5px; color:#20180d; min-height:40px;
+  }
+  .note-body textarea::placeholder{color:#20180d80;}
+  .note-body img{ max-width:100%; border-radius:3px; display:block; flex-shrink:0; cursor:default; }
+  .note-image-tools{ display:flex; gap:6px; flex-shrink:0; }
+  .note-image-tools .btn{ padding:3px 8px; font-size:11.5px; background:rgba(0,0,0,.1); border:none; color:#20180d;}
+  .note-image-tools .btn:hover{background:rgba(0,0,0,.2);}
+  .note-resize{
+    position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; z-index:6;
+  }
+  .note-resize svg{ display:block; }
+  .note.minimized .note-body, .note.minimized .note-resize{ display:none; }
+  .note.minimized{ min-height:0; }
+
+  .color-menu{
+    position:absolute; top:32px; right:6px; background:#1c262d; border:1px solid var(--toolbar-border);
+    border-radius:8px; padding:8px; display:none; z-index:100; box-shadow:0 8px 20px rgba(0,0,0,.4);
+    grid-template-columns:repeat(4, 22px); gap:8px;
+  }
+  .color-menu.show{ display:grid; }
+  .swatch{ width:22px; height:22px; border-radius:50%; cursor:pointer; border:2px solid rgba(255,255,255,.25); }
+  .swatch:hover{ border-color:#fff; }
+
+  #empty-hint{
+    position:absolute; top:40%; left:50%; transform:translate(-50%,-50%);
+    color:var(--ink-dim); font-size:15px; text-align:center; pointer-events:none;
+  }
+
+  /* ---------- Background image ---------- */
+  #bg-layer{
+    position:fixed; top:56px; left:0; right:0; bottom:0; z-index:0;
+    background-color:var(--canvas-bg); overflow:hidden;
+  }
+  #bg-image{
+    position:absolute; inset:0;
+    background-position:center; background-repeat:no-repeat; background-size:cover;
+    opacity:0; transition:opacity .15s ease;
+  }
+  #viewport{ position:absolute; z-index:1; }
+
+  .bg-panel{
+    position:absolute; top:48px; left:0; background:#1c262d; border:1px solid var(--toolbar-border);
+    border-radius:10px; padding:12px; display:none; z-index:150; box-shadow:0 10px 26px rgba(0,0,0,.45);
+    width:260px;
+  }
+  .bg-panel.show{ display:block; }
+  .bg-panel h4{ margin:0 0 8px; font-size:12px; color:var(--ink-dim); font-weight:600; }
+  .bg-presets{ display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; margin-bottom:10px; }
+  .bg-preset{
+    aspect-ratio:1; border-radius:6px; cursor:pointer; background-size:cover; background-position:center;
+    border:2px solid transparent;
+  }
+  .bg-preset:hover, .bg-preset.active{ border-color:var(--accent); }
+  .bg-panel .btn{ width:100%; justify-content:center; margin-bottom:8px; }
+  .bg-opacity-row{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--ink-dim); }
+  .bg-opacity-row input[type=range]{ flex:1; }
+  #toolbar{ position:relative; }
+
+  /* ---------- Info button ---------- */
+  #info-wrap{ position:relative; margin-left:auto; }
+  #btn-info{
+    width:30px; height:30px; border-radius:50%; background:#26333c; color:var(--accent);
+    border:1px solid var(--toolbar-border); cursor:pointer; font-size:15px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; font-family:'Caveat',cursive;
+  }
+  #btn-info:hover{ background:#31414c; }
+  #info-tooltip{
+    position:absolute; top:38px; right:0; width:240px; background:#1c262d;
+    border:1px solid var(--toolbar-border); border-radius:10px; padding:12px 14px;
+    font-size:13px; line-height:1.5; color:var(--ink); box-shadow:0 10px 26px rgba(0,0,0,.45);
+    opacity:0; pointer-events:none; transform:translateY(-4px); transition:opacity .15s ease, transform .15s ease;
+    z-index:200;
+  }
+  #info-wrap:hover #info-tooltip{ opacity:1; transform:translateY(0); }
+
+  /* ---------- Utility note menu ---------- */
+  .util-menu{
+    position:absolute; top:38px; left:0; background:#1c262d; border:1px solid var(--toolbar-border);
+    border-radius:8px; padding:6px; display:none; z-index:150; box-shadow:0 10px 26px rgba(0,0,0,.45);
+    min-width:140px;
+  }
+  .util-menu.show{ display:block; }
+  .util-option{
+    padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13.5px; color:var(--ink);
+  }
+  .util-option:hover{ background:#31414c; }
+
+  /* ---------- Utility notes ---------- */
+  .note-title-static{
+    font-family:'Inter',system-ui,sans-serif; font-size:15px; font-weight:700; color:#20180d;
+    flex:1; min-width:0; user-select:none;
+  }
+  .note-body-utility{ flex:1; padding:0; display:flex; min-height:0; }
+  .note-body-utility img{
+    width:100%; height:100%; object-fit:cover; border-radius:8px; display:block; pointer-events:none;
+  }
+  @keyframes note-shake{
+    0%,100%{ transform:translate(0,0); }
+    15%{ transform:translate(-6px,-2px); }
+    30%{ transform:translate(6px,2px); }
+    45%{ transform:translate(-5px,2px); }
+    60%{ transform:translate(5px,-2px); }
+    75%{ transform:translate(-3px,1px); }
+    90%{ transform:translate(3px,-1px); }
+  }
+  .note.shaking{ animation: note-shake .4s ease-in-out; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>cool notes</h1>
+  <button class="btn primary" id="btn-new-note">+ Note</button>
+  <div class="sep"></div>
+  <input type="text" id="board-name" value="Untitled board" title="Board name">
+  <button class="btn" id="btn-save">Save</button>
+  <select id="board-select" title="Saved boards">
+    <option value="">Load a board…</option>
+  </select>
+  <button class="btn" id="btn-load">Load</button>
+  <button class="btn danger" id="btn-delete-board">Delete</button>
+  <div class="sep"></div>
+  <button class="btn" id="btn-new-board">New board</button>
+  <div class="sep"></div>
+  <button class="btn" id="btn-export">Export .json</button>
+  <button class="btn" id="btn-import">Import .json</button>
+  <input type="file" id="import-input" accept="application/json" style="display:none">
+  <div class="sep"></div>
+  <div style="position:relative;">
+    <button class="btn" id="btn-background">Background</button>
+    <div class="bg-panel" id="bg-panel">
+      <h4>Default backgrounds</h4>
+      <div class="bg-presets" id="bg-presets"></div>
+      <button class="btn" id="btn-bg-upload">Upload image…</button>
+      <input type="file" id="bg-upload-input" accept="image/*" style="display:none">
+      <div class="bg-opacity-row">
+        <span>Opacity</span>
+        <input type="range" id="bg-opacity" min="0" max="100" value="60">
+      </div>
+      <button class="btn danger" id="btn-bg-clear" style="margin-top:8px;">Remove background</button>
+    </div>
+  </div>
+  <div class="sep"></div>
+  <div style="position:relative;">
+    <button class="btn" id="btn-add-utility" title="Add a utility note">+</button>
+    <div class="util-menu" id="util-menu"></div>
+  </div>
+  <span id="status"></span>
+  <div id="info-wrap">
+    <button id="btn-info" title="">i</button>
+    <div id="info-tooltip">buenas notas. exporta tu json para asegurarte de no perder tu trabajo. hecho mal, con ia, no me importa si no funciona. tqm -sabbii</div>
+  </div>
+</div>
+
+<div id="link-banner">Click the note that should become the child — Esc to cancel</div>
+
+<div id="bg-layer"><div id="bg-image"></div></div>
+<div id="viewport">
+  <div id="canvas-inner">
+    <svg id="arrow-svg"><defs></defs></svg>
+    <div id="empty-hint">Your board is empty. Click "+ Note" to stick one up.</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const COLORS = {
+    yellow:'#F5E27A', pink:'#F6AFC2', gray:'#D5D5D5', green:'#AEE3A8',
+    orange:'#F5B87A', purple:'#D2B3EA', white:'#F1EEE4', mint:'#B7E8D6'
+  };
+  const COLOR_ORDER = Object.keys(COLORS);
+
+  let notes = [];           // {id,title,text,image,x,y,w,h,minimized,color,parentId}
+  let links = [];           // neutral links: {id, a, b} — no hierarchy, no arrowhead
+  let linkSourceId = null;  // note currently choosing a link partner
+  let linkMode = null;      // 'parent' | 'neutral'
+  let dragging = null;      // {id, offX, offY}
+  let resizing = null;      // {id, startW, startH, startX, startY}
+  let idCounter = 1;
+
+  const el = {
+    viewport: document.getElementById('viewport'),
+    inner: document.getElementById('canvas-inner'),
+    svg: document.getElementById('arrow-svg'),
+    defs: document.querySelector('#arrow-svg defs'),
+    emptyHint: document.getElementById('empty-hint'),
+    boardName: document.getElementById('board-name'),
+    boardSelect: document.getElementById('board-select'),
+    status: document.getElementById('status'),
+    linkBanner: document.getElementById('link-banner'),
+    bgLayer: document.getElementById('bg-layer'),
+    bgImage: document.getElementById('bg-image'),
+    bgPanel: document.getElementById('bg-panel'),
+    bgPresets: document.getElementById('bg-presets'),
+    bgOpacity: document.getElementById('bg-opacity'),
+    utilMenu: document.getElementById('util-menu'),
+  };
+
+  // Registry of utility note kinds — add more here later.
+  const UTILITY_TYPES = {
+    i: { label: 'i', asset: 'res/i.gif' },
+    mouth: { label: '👄', asset: 'res/mouth.gif' },
+    roulette: { label: 'Roulette' }, // stateful — rendered and driven specially, see below
+    ouyea: { label: 'ou yea', asset: 'res/pn.gif' } // also drives global keypress sounds, see below
+  };
+
+  const ROULETTE_ASSETS = {
+    normal: 'res/rr_normal.png',
+    dry: 'res/rr_click.png',
+    wet: 'res/rr_whoops.png',
+    dead: 'res/rr_umm.png'
+  };
+  const ROULETTE_SOUNDS = { dry: 'res/rr_dry.mp3', wet: 'res/rr_wet.mp3' };
+
+  function playSound(src){
+    try{ const a = new Audio(src); a.play().catch(()=>{}); }catch(err){ /* ignore */ }
+  }
+
+  function triggerRoulette(note){
+    if(note.rouletteState !== 'normal') return;
+    const isWet = Math.random() < (1/6);
+    note.rouletteState = isWet ? 'wet' : 'dry';
+    render();
+    if(isWet){
+      playSound(ROULETTE_SOUNDS.wet);
+      setTimeout(()=>{
+        const n = getById(note.id);
+        if(n && n.rouletteState === 'wet'){ n.rouletteState = 'dead'; render(); }
+      }, 400);
+    } else {
+      playSound(ROULETTE_SOUNDS.dry);
+      setTimeout(()=>{
+        const n = getById(note.id);
+        if(n && n.rouletteState === 'dry'){ n.rouletteState = 'normal'; render(); }
+      }, 1000);
+    }
+  }
+
+  function uid(){ return 'n' + (idCounter++) + '-' + Math.random().toString(36).slice(2,7); }
+
+  function showStatus(msg, isError){
+    el.status.textContent = msg;
+    el.status.style.color = isError ? 'var(--danger)' : 'var(--ink-dim)';
+    el.status.classList.add('show');
+    clearTimeout(showStatus._t);
+    showStatus._t = setTimeout(()=> el.status.classList.remove('show'), 2600);
+  }
+
+  // ---------- Visibility / hierarchy helpers ----------
+  function getById(id){ return notes.find(n=>n.id===id); }
+
+  function isDescendantHidden(note){
+    // hidden if any ancestor is minimized
+    let p = getById(note.parentId);
+    while(p){
+      if(p.minimized) return true;
+      p = getById(p.parentId);
+    }
+    return false;
+  }
+
+  function isAncestor(candidateAncestorId, noteId){
+    let p = getById(noteId);
+    while(p){
+      if(p.id === candidateAncestorId) return true;
+      p = getById(p.parentId);
+    }
+    return false;
+  }
+
+  // ---------- Canvas bounds ----------
+  function updateCanvasBounds(){
+    const vpW = el.viewport.clientWidth, vpH = el.viewport.clientHeight;
+    let maxX = 0, maxY = 0;
+    notes.forEach(n=>{
+      maxX = Math.max(maxX, n.x + n.w);
+      maxY = Math.max(maxY, n.y + n.h);
+    });
+    const w = Math.max(maxX + 260, vpW);
+    const h = Math.max(maxY + 260, vpH);
+    el.inner.style.width = w + 'px';
+    el.inner.style.height = h + 'px';
+    el.svg.setAttribute('width', w);
+    el.svg.setAttribute('height', h);
+    el.svg.style.width = w + 'px';
+    el.svg.style.height = h + 'px';
+  }
+
+  // ---------- Rendering ----------
+  function render(){
+    // remove old note elements
+    el.inner.querySelectorAll('.note').forEach(n=>n.remove());
+    el.emptyHint.style.display = notes.length ? 'none' : 'block';
+
+    notes.forEach(note=>{
+      const hidden = isDescendantHidden(note);
+      const nodeEl = buildNoteEl(note);
+      nodeEl.style.display = hidden ? 'none' : 'flex';
+      el.inner.appendChild(nodeEl);
+    });
+
+    updateCanvasBounds();
+    drawArrows();
+  }
+
+  function buildNoteEl(note){
+    const wrap = document.createElement('div');
+    wrap.className = 'note' + (note.minimized ? ' minimized' : '')
+      + (note.utilityType === 'roulette' && note.rouletteState === 'wet' ? ' shaking' : '');
+    wrap.style.left = note.x + 'px';
+    wrap.style.top = note.y + 'px';
+    wrap.style.width = note.w + 'px';
+    wrap.style.height = note.minimized ? 'auto' : note.h + 'px';
+    wrap.style.background = note.color;
+    wrap.dataset.id = note.id;
+
+    if(linkSourceId && linkSourceId !== note.id){
+      const blocked = linkMode === 'parent' && isAncestor(note.id, linkSourceId);
+      if(!blocked) wrap.classList.add('linking-target');
+    }
+
+    // header
+    const header = document.createElement('div');
+    header.className = 'note-header';
+
+    const isUtility = note.kind === 'utility';
+
+    let title;
+    if(isUtility){
+      title = document.createElement('span');
+      title.className = 'note-title-static';
+      title.textContent = note.title;
+    } else {
+      title = document.createElement('input');
+      title.className = 'note-title';
+      title.type = 'text';
+      title.placeholder = 'Untitled note';
+      title.value = note.title;
+      title.addEventListener('mousedown', e=> e.stopPropagation());
+      title.addEventListener('change', ()=>{ note.title = title.value; });
+    }
+
+    const colorBtn = document.createElement('button');
+    colorBtn.className = 'note-icon-btn';
+    colorBtn.title = 'Recolor';
+    colorBtn.textContent = '●';
+    colorBtn.addEventListener('mousedown', e=>e.stopPropagation());
+    colorBtn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleColorMenu(note, wrap, colorBtn); });
+
+    const linkBtn = document.createElement('button');
+    linkBtn.className = 'note-icon-btn' + (linkSourceId === note.id && linkMode === 'parent' ? ' active' : '');
+    linkBtn.title = 'Link to a child note';
+    linkBtn.textContent = '↗';
+    linkBtn.addEventListener('mousedown', e=>e.stopPropagation());
+    linkBtn.addEventListener('click', (e)=>{ e.stopPropagation(); startLinking(note.id, 'parent'); });
+
+    const neutralLinkBtn = document.createElement('button');
+    neutralLinkBtn.className = 'note-icon-btn' + (linkSourceId === note.id && linkMode === 'neutral' ? ' active' : '');
+    neutralLinkBtn.title = 'Link to another note (no hierarchy)';
+    neutralLinkBtn.textContent = '⇄';
+    neutralLinkBtn.addEventListener('mousedown', e=>e.stopPropagation());
+    neutralLinkBtn.addEventListener('click', (e)=>{ e.stopPropagation(); startLinking(note.id, 'neutral'); });
+
+    const minBtn = document.createElement('button');
+    minBtn.className = 'note-icon-btn';
+    minBtn.title = note.minimized ? 'Restore' : 'Minimize';
+    minBtn.textContent = note.minimized ? '▢' : '—';
+    minBtn.addEventListener('mousedown', e=>e.stopPropagation());
+    minBtn.addEventListener('click', (e)=>{ e.stopPropagation(); note.minimized = !note.minimized; render(); });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'note-icon-btn';
+    delBtn.title = 'Delete';
+    delBtn.textContent = '×';
+    delBtn.addEventListener('mousedown', e=>e.stopPropagation());
+    delBtn.addEventListener('click', (e)=>{ e.stopPropagation(); deleteNote(note.id); });
+
+    header.appendChild(title);
+    header.appendChild(colorBtn);
+    header.appendChild(linkBtn);
+    header.appendChild(neutralLinkBtn);
+    header.appendChild(minBtn);
+    header.appendChild(delBtn);
+    wrap.appendChild(header);
+
+    // color menu
+    const colorMenu = document.createElement('div');
+    colorMenu.className = 'color-menu';
+    COLOR_ORDER.forEach(key=>{
+      const sw = document.createElement('div');
+      sw.className = 'swatch';
+      sw.style.background = COLORS[key];
+      sw.addEventListener('mousedown', e=>e.stopPropagation());
+      sw.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        note.color = COLORS[key];
+        colorMenu.classList.remove('show');
+        wrap.style.background = note.color;
+        drawArrows();
+      });
+      colorMenu.appendChild(sw);
+    });
+    wrap.appendChild(colorMenu);
+
+    if(!note.minimized){
+      const body = document.createElement('div');
+
+      if(isUtility){
+        body.className = 'note-body-utility';
+        const img = document.createElement('img');
+        img.draggable = false;
+
+        if(note.utilityType === 'roulette'){
+          img.src = ROULETTE_ASSETS[note.rouletteState] || ROULETTE_ASSETS.normal;
+          if(note.rouletteState === 'normal'){
+            img.style.pointerEvents = 'auto';
+            img.style.cursor = 'pointer';
+            img.addEventListener('click', (e)=>{ e.stopPropagation(); triggerRoulette(note); });
+          }
+        } else {
+          img.src = UTILITY_TYPES[note.utilityType] ? UTILITY_TYPES[note.utilityType].asset : '';
+        }
+        body.appendChild(img);
+      } else {
+        body.className = 'note-body';
+
+        if(note.image){
+          const img = document.createElement('img');
+          img.src = note.image;
+          body.appendChild(img);
+          const tools = document.createElement('div');
+          tools.className = 'note-image-tools';
+          const removeImgBtn = document.createElement('button');
+          removeImgBtn.className = 'btn';
+          removeImgBtn.textContent = 'Remove image';
+          removeImgBtn.addEventListener('mousedown', e=>e.stopPropagation());
+          removeImgBtn.addEventListener('click', (e)=>{ e.stopPropagation(); note.image=null; render(); });
+          tools.appendChild(removeImgBtn);
+          body.appendChild(tools);
+        } else {
+          const tools = document.createElement('div');
+          tools.className = 'note-image-tools';
+          const addImgBtn = document.createElement('button');
+          addImgBtn.className = 'btn';
+          addImgBtn.textContent = '🖼 Add image';
+          addImgBtn.addEventListener('mousedown', e=>e.stopPropagation());
+          addImgBtn.addEventListener('click', (e)=>{ e.stopPropagation(); pickImage(note); });
+          tools.appendChild(addImgBtn);
+          body.appendChild(tools);
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.placeholder = 'Write something…';
+        textarea.value = note.text || '';
+        textarea.addEventListener('mousedown', e=>e.stopPropagation());
+        textarea.addEventListener('change', ()=>{ note.text = textarea.value; });
+        body.appendChild(textarea);
+      }
+
+      wrap.appendChild(body);
+
+      const resize = document.createElement('div');
+      resize.className = 'note-resize';
+      resize.innerHTML = '<svg width="16" height="16"><path d="M14 2 L2 14 M14 8 L8 14" stroke="#20180d55" stroke-width="1.5"/></svg>';
+      resize.addEventListener('mousedown', (e)=> startResize(e, note));
+      wrap.appendChild(resize);
+    }
+
+    header.addEventListener('mousedown', (e)=>{
+      if(e.target !== header) return; // only drag from empty header area
+      startDrag(e, note);
+    });
+
+    wrap.addEventListener('mousedown', ()=> bringToFront(note));
+
+    wrap.addEventListener('click', (e)=>{
+      if(linkSourceId && linkSourceId !== note.id){
+        e.stopPropagation();
+        completeLinking(note.id);
+      }
+    });
+
+    return wrap;
+  }
+
+  function toggleColorMenu(note, wrap, btn){
+    const menu = wrap.querySelector('.color-menu');
+    document.querySelectorAll('.color-menu.show').forEach(m=>{ if(m!==menu) m.classList.remove('show'); });
+    menu.classList.toggle('show');
+  }
+
+  function bringToFront(note){
+    const maxZ = Math.max(0, ...notes.map(n=>n._z||0));
+    note._z = maxZ + 1;
+    const domEl = el.inner.querySelector('.note[data-id="'+note.id+'"]');
+    if(domEl) domEl.style.zIndex = 10 + note._z;
+  }
+
+  function pickImage(note){
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.addEventListener('change', ()=>{
+      const file = input.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{ note.image = reader.result; render(); };
+      reader.readAsDataURL(file);
+    });
+    input.click();
+  }
+
+  // ---------- Linking ----------
+  function startLinking(id, mode){
+    if(linkSourceId === id && linkMode === mode){
+      linkSourceId = null; linkMode = null;
+    } else {
+      linkSourceId = id; linkMode = mode;
+    }
+    el.linkBanner.textContent = linkMode === 'neutral'
+      ? 'Click another note to link them — no hierarchy — Esc to cancel'
+      : 'Click the note that should become the child — Esc to cancel';
+    el.linkBanner.style.display = linkSourceId ? 'block' : 'none';
+    render();
+  }
+
+  function completeLinking(otherId){
+    if(!linkSourceId) return;
+    if(linkMode === 'parent'){
+      if(isAncestor(otherId, linkSourceId)){
+        showStatus("Can't link — that would create a loop.", true);
+        return;
+      }
+      const child = getById(otherId);
+      child.parentId = linkSourceId;
+    } else if(linkMode === 'neutral'){
+      const exists = links.some(l =>
+        (l.a === linkSourceId && l.b === otherId) || (l.a === otherId && l.b === linkSourceId));
+      if(exists){
+        showStatus('Those notes are already linked.', true);
+      } else {
+        links.push({ id: uid(), a: linkSourceId, b: otherId });
+      }
+    }
+    linkSourceId = null;
+    linkMode = null;
+    el.linkBanner.style.display = 'none';
+    render();
+  }
+
+  function removeNeutralLink(id){
+    links = links.filter(l => l.id !== id);
+    render();
+  }
+
+  function removeParentLink(childId){
+    const child = getById(childId);
+    if(child) child.parentId = null;
+    render();
+  }
+
+  document.addEventListener('keydown', (e)=>{
+    if(e.key === 'Escape' && linkSourceId){
+      linkSourceId = null;
+      linkMode = null;
+      el.linkBanner.style.display = 'none';
+      render();
+    }
+  });
+
+  // "ou yea" utility notes: while at least one is on the board and visible,
+  // every keypress plays a random pn_1..pn_7 sound.
+  document.addEventListener('keydown', ()=>{
+    const active = notes.some(n =>
+      n.kind === 'utility' && n.utilityType === 'ouyea' && !n.minimized && !isDescendantHidden(n));
+    if(active){
+      const idx = Math.floor(Math.random() * 7) + 1;
+      playSound('res/pn_' + idx + '.mp3');
+    }
+  });
+
+  // ---------- Drag ----------
+  function startDrag(e, note){
+    e.preventDefault();
+    bringToFront(note);
+    const rect = el.inner.getBoundingClientRect();
+    dragging = {
+      id: note.id,
+      offX: e.clientX - rect.left - note.x,
+      offY: e.clientY - rect.top - note.y
+    };
+  }
+
+  window.addEventListener('mousemove', (e)=>{
+    if(dragging){
+      const note = getById(dragging.id);
+      if(!note) return;
+      const rect = el.inner.getBoundingClientRect();
+      let x = e.clientX - rect.left - dragging.offX;
+      let y = e.clientY - rect.top - dragging.offY;
+      x = Math.max(0, x);
+      y = Math.max(0, y);
+      note.x = x; note.y = y;
+      const domEl = el.inner.querySelector('.note[data-id="'+note.id+'"]');
+      if(domEl){ domEl.style.left = x+'px'; domEl.style.top = y+'px'; }
+      updateCanvasBounds();
+      drawArrows();
+      autoScrollNearEdge(e);
+    } else if(resizing){
+      const note = getById(resizing.id);
+      if(!note) return;
+      const dx = e.clientX - resizing.startClientX;
+      const dy = e.clientY - resizing.startClientY;
+      note.w = Math.max(150, resizing.startW + dx);
+      note.h = Math.max(60, resizing.startH + dy);
+      const domEl = el.inner.querySelector('.note[data-id="'+note.id+'"]');
+      if(domEl){ domEl.style.width = note.w+'px'; domEl.style.height = note.h+'px'; }
+      updateCanvasBounds();
+      drawArrows();
+    }
+  });
+
+  window.addEventListener('mouseup', ()=>{
+    dragging = null;
+    resizing = null;
+  });
+
+  function autoScrollNearEdge(e){
+    const margin = 40, speed = 18;
+    const r = el.viewport.getBoundingClientRect();
+    if(e.clientX > r.right - margin) el.viewport.scrollLeft += speed;
+    if(e.clientY > r.bottom - margin) el.viewport.scrollTop += speed;
+  }
+
+  function startResize(e, note){
+    e.preventDefault();
+    e.stopPropagation();
+    resizing = {
+      id: note.id,
+      startW: note.w, startH: note.h,
+      startClientX: e.clientX, startClientY: e.clientY
+    };
+  }
+
+  // ---------- Arrows ----------
+  const HEADER_H = 33; // approx height of the note-header title bar
+
+  function edgePoint(note){
+    return { cx: note.x + note.w/2, cy: note.y + HEADER_H/2 };
+  }
+
+  function centerPoint(note){
+    return { cx: note.x + note.w/2, cy: note.y + (note.minimized ? HEADER_H : note.h)/2 };
+  }
+
+  function noteRect(note){
+    return { x: note.x, y: note.y, w: note.w, h: note.minimized ? HEADER_H : note.h };
+  }
+
+  // Finds where the segment from (px,py) toward (qx,qy) first crosses rect's boundary.
+  // (px,py) is expected to lie inside (or on) rect.
+  function rectExitPoint(px, py, qx, qy, rect){
+    const dx = qx - px, dy = qy - py;
+    let tMin = 1;
+    const consider = (t)=>{ if(t > 1e-4 && t < tMin) tMin = t; };
+    if(dx !== 0){
+      let t = (rect.x - px) / dx;
+      let y = py + t*dy;
+      if(t >= 0 && t <= 1 && y >= rect.y && y <= rect.y + rect.h) consider(t);
+      t = (rect.x + rect.w - px) / dx;
+      y = py + t*dy;
+      if(t >= 0 && t <= 1 && y >= rect.y && y <= rect.y + rect.h) consider(t);
+    }
+    if(dy !== 0){
+      let t = (rect.y - py) / dy;
+      let x = px + t*dx;
+      if(t >= 0 && t <= 1 && x >= rect.x && x <= rect.x + rect.w) consider(t);
+      t = (rect.y + rect.h - py) / dy;
+      x = px + t*dx;
+      if(t >= 0 && t <= 1 && x >= rect.x && x <= rect.x + rect.w) consider(t);
+    }
+    return { x: px + tMin*dx, y: py + tMin*dy };
+  }
+
+  function makeHitLine(x1,y1,x2,y2,onRemove){
+    const hit = document.createElementNS('http://www.w3.org/2000/svg','line');
+    hit.setAttribute('x1', x1); hit.setAttribute('y1', y1);
+    hit.setAttribute('x2', x2); hit.setAttribute('y2', y2);
+    hit.setAttribute('stroke', 'transparent');
+    hit.setAttribute('stroke-width', '14');
+    hit.style.pointerEvents = 'auto';
+    hit.style.cursor = 'pointer';
+    hit.addEventListener('click', (e)=>{ e.stopPropagation(); onRemove(); });
+    return hit;
+  }
+
+  function drawArrows(){
+    // clear
+    el.svg.querySelectorAll('line, marker').forEach(n=>n.remove());
+    el.defs.innerHTML = '';
+
+    // Hierarchical (parent → child) links
+    notes.forEach(child=>{
+      if(!child.parentId) return;
+      const parent = getById(child.parentId);
+      if(!parent) return;
+      if(isDescendantHidden(child) || isDescendantHidden(parent)) return;
+      if(parent.minimized) return; // parent minimized hides children & their links entirely
+
+      const c1 = centerPoint(parent), c2 = edgePoint(child);
+      // Clip the line to each note's actual box so both ends — and the
+      // arrowhead — land outside the notes instead of being hidden under them.
+      const p1 = rectExitPoint(c1.cx, c1.cy, c2.cx, c2.cy, noteRect(parent));
+      const p2 = rectExitPoint(c2.cx, c2.cy, c1.cx, c1.cy, noteRect(child));
+      const gradId = 'grad-' + parent.id + '-' + child.id;
+      const grad = document.createElementNS('http://www.w3.org/2000/svg','linearGradient');
+      grad.setAttribute('id', gradId);
+      grad.setAttribute('x1', p1.x); grad.setAttribute('y1', p1.y);
+      grad.setAttribute('x2', p2.x); grad.setAttribute('y2', p2.y);
+      grad.setAttribute('gradientUnits', 'userSpaceOnUse');
+      const s1 = document.createElementNS('http://www.w3.org/2000/svg','stop');
+      s1.setAttribute('offset','0%'); s1.setAttribute('stop-color', parent.color);
+      const s2 = document.createElementNS('http://www.w3.org/2000/svg','stop');
+      s2.setAttribute('offset','100%'); s2.setAttribute('stop-color', child.color);
+      grad.appendChild(s1); grad.appendChild(s2);
+      el.defs.appendChild(grad);
+
+      const markerId = 'arrow-' + parent.id + '-' + child.id;
+      const marker = document.createElementNS('http://www.w3.org/2000/svg','marker');
+      marker.setAttribute('id', markerId);
+      marker.setAttribute('markerWidth','6'); marker.setAttribute('markerHeight','6');
+      marker.setAttribute('viewBox','0 0 6 6');
+      marker.setAttribute('refX','5'); marker.setAttribute('refY','3');
+      marker.setAttribute('orient','auto-start-reverse');
+      marker.setAttribute('markerUnits','strokeWidth');
+      const arrowPath = document.createElementNS('http://www.w3.org/2000/svg','path');
+      arrowPath.setAttribute('d','M0,0 L6,3 L0,6 Z');
+      arrowPath.setAttribute('fill', child.color);
+      marker.appendChild(arrowPath);
+      el.defs.appendChild(marker);
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1', p1.x); line.setAttribute('y1', p1.y);
+      line.setAttribute('x2', p2.x); line.setAttribute('y2', p2.y);
+      line.setAttribute('stroke', 'url(#'+gradId+')');
+      line.setAttribute('stroke-width','2.5');
+      line.setAttribute('marker-end', 'url(#'+markerId+')');
+      el.svg.appendChild(line);
+      el.svg.appendChild(makeHitLine(p1.x,p1.y,p2.x,p2.y, ()=> removeParentLink(child.id)));
+    });
+
+    // Neutral links — no hierarchy, no arrowhead, symmetric
+    links.forEach(link=>{
+      const a = getById(link.a), b = getById(link.b);
+      if(!a || !b) return;
+      if(isDescendantHidden(a) || isDescendantHidden(b)) return;
+
+      const c1 = centerPoint(a), c2 = centerPoint(b);
+      const p1 = rectExitPoint(c1.cx, c1.cy, c2.cx, c2.cy, noteRect(a));
+      const p2 = rectExitPoint(c2.cx, c2.cy, c1.cx, c1.cy, noteRect(b));
+      const gradId = 'grad-link-' + link.id;
+      const grad = document.createElementNS('http://www.w3.org/2000/svg','linearGradient');
+      grad.setAttribute('id', gradId);
+      grad.setAttribute('x1', p1.x); grad.setAttribute('y1', p1.y);
+      grad.setAttribute('x2', p2.x); grad.setAttribute('y2', p2.y);
+      grad.setAttribute('gradientUnits', 'userSpaceOnUse');
+      const s1 = document.createElementNS('http://www.w3.org/2000/svg','stop');
+      s1.setAttribute('offset','0%'); s1.setAttribute('stop-color', a.color);
+      const s2 = document.createElementNS('http://www.w3.org/2000/svg','stop');
+      s2.setAttribute('offset','100%'); s2.setAttribute('stop-color', b.color);
+      grad.appendChild(s1); grad.appendChild(s2);
+      el.defs.appendChild(grad);
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1', p1.x); line.setAttribute('y1', p1.y);
+      line.setAttribute('x2', p2.x); line.setAttribute('y2', p2.y);
+      line.setAttribute('stroke', 'url(#'+gradId+')');
+      line.setAttribute('stroke-width','2.5');
+      line.setAttribute('stroke-dasharray', '1,6');
+      line.setAttribute('stroke-linecap', 'round');
+      el.svg.appendChild(line);
+      el.svg.appendChild(makeHitLine(p1.x,p1.y,p2.x,p2.y, ()=> removeNeutralLink(link.id)));
+    });
+  }
+
+  // ---------- Note CRUD ----------
+  function addNote(){
+    const rect = el.viewport.getBoundingClientRect();
+    const x = el.viewport.scrollLeft + rect.width/2 - 110 + Math.random()*40 - 20;
+    const y = el.viewport.scrollTop + rect.height/2 - 90 + Math.random()*40 - 20;
+    const note = {
+      id: uid(), title: '', text: '', image: null,
+      x: Math.max(0,x), y: Math.max(0,y), w: 220, h: 190,
+      minimized: false, color: COLORS[COLOR_ORDER[notes.length % COLOR_ORDER.length]],
+      parentId: null
+    };
+    notes.push(note);
+    render();
+  }
+
+  function addUtilityNote(utilityType){
+    const def = UTILITY_TYPES[utilityType];
+    if(!def) return;
+    const rect = el.viewport.getBoundingClientRect();
+    const x = el.viewport.scrollLeft + rect.width/2 - 80 + Math.random()*40 - 20;
+    const y = el.viewport.scrollTop + rect.height/2 - 80 + Math.random()*40 - 20;
+    const note = {
+      id: uid(), kind: 'utility', utilityType, title: def.label,
+      text: '', image: null,
+      x: Math.max(0,x), y: Math.max(0,y), w: 160, h: 160,
+      minimized: false, color: COLORS[COLOR_ORDER[notes.length % COLOR_ORDER.length]],
+      parentId: null
+    };
+    if(utilityType === 'roulette') note.rouletteState = 'normal';
+    notes.push(note);
+    render();
+  }
+
+  function deleteNote(id){
+    // orphan children (they keep floating, just lose the link)
+    notes.forEach(n=>{ if(n.parentId === id) n.parentId = null; });
+    links = links.filter(l => l.a !== id && l.b !== id);
+    notes = notes.filter(n=>n.id !== id);
+    if(linkSourceId === id){ linkSourceId = null; linkMode = null; el.linkBanner.style.display='none'; }
+    render();
+  }
+
+  // ---------- Persistence ----------
+  // Boards are saved to this browser's localStorage under this page's origin.
+  // That's reliable when the file is hosted, but some browsers isolate or
+  // clear storage for local file:// pages between sessions — Export/Import
+  // to a .json file is the dependable way to keep a permanent copy.
+  const STORAGE_PREFIX = 'corkboard:board:';
+
+  function slugify(name){
+    return name.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'untitled';
+  }
+
+  function storageAvailable(){
+    try{
+      const k = '__corkboard_test__';
+      localStorage.setItem(k, '1');
+      localStorage.removeItem(k);
+      return true;
+    }catch(err){ return false; }
+  }
+
+  function saveBoard(){
+    const name = el.boardName.value.trim() || 'Untitled board';
+    const slug = slugify(name);
+    const payload = JSON.stringify({ name, notes, links, savedAt: Date.now() });
+    if(!storageAvailable()){
+      showStatus('This browser blocks local storage here — use Export instead.', true);
+      return;
+    }
+    try{
+      localStorage.setItem(STORAGE_PREFIX + slug, payload);
+      showStatus('Saved "' + name + '".');
+      refreshBoardList(slug);
+    }catch(err){
+      showStatus('Save failed: ' + err.message, true);
+    }
+  }
+
+  function loadBoard(){
+    const slug = el.boardSelect.value;
+    if(!slug){ showStatus('Pick a board to load first.', true); return; }
+    try{
+      const raw = localStorage.getItem(STORAGE_PREFIX + slug);
+      if(!raw){ showStatus('That board could not be found.', true); return; }
+      const data = JSON.parse(raw);
+      notes = data.notes || [];
+      links = data.links || [];
+      el.boardName.value = data.name || slug;
+      linkSourceId = null;
+      linkMode = null;
+      el.linkBanner.style.display = 'none';
+      render();
+      showStatus('Loaded "' + (data.name || slug) + '".');
+    }catch(err){
+      showStatus('Load failed: ' + err.message, true);
+    }
+  }
+
+  function deleteBoard(){
+    const slug = el.boardSelect.value;
+    if(!slug){ showStatus('Pick a board to delete first.', true); return; }
+    try{
+      localStorage.removeItem(STORAGE_PREFIX + slug);
+      showStatus('Deleted board.');
+      refreshBoardList();
+    }catch(err){
+      showStatus('Delete failed: ' + err.message, true);
+    }
+  }
+
+  function newBoard(){
+    if(notes.length && !confirm('Start a new board? Unsaved changes will be lost.')) return;
+    notes = [];
+    links = [];
+    linkSourceId = null;
+    linkMode = null;
+    el.linkBanner.style.display = 'none';
+    el.boardName.value = 'Untitled board';
+    render();
+  }
+
+  function refreshBoardList(selectSlug){
+    try{
+      el.boardSelect.innerHTML = '<option value="">Load a board…</option>';
+      for(let i = 0; i < localStorage.length; i++){
+        const key = localStorage.key(i);
+        if(!key || key.indexOf(STORAGE_PREFIX) !== 0) continue;
+        const slug = key.slice(STORAGE_PREFIX.length);
+        const opt = document.createElement('option');
+        opt.value = slug;
+        opt.textContent = slug.replace(/-/g,' ');
+        el.boardSelect.appendChild(opt);
+      }
+      if(selectSlug) el.boardSelect.value = selectSlug;
+    }catch(err){
+      // storage unavailable — leave the dropdown empty
+    }
+  }
+
+  function exportBoard(){
+    const name = el.boardName.value.trim() || 'Untitled board';
+    const payload = JSON.stringify({ name, notes, links, savedAt: Date.now() }, null, 2);
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = slugify(name) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showStatus('Exported "' + name + '".');
+  }
+
+  function importBoard(){
+    document.getElementById('import-input').click();
+  }
+
+  document.getElementById('import-input').addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const data = JSON.parse(reader.result);
+        notes = data.notes || [];
+        links = data.links || [];
+        el.boardName.value = data.name || file.name.replace(/\.json$/i,'');
+        linkSourceId = null;
+        linkMode = null;
+        el.linkBanner.style.display = 'none';
+        render();
+        showStatus('Imported "' + el.boardName.value + '".');
+      }catch(err){
+        showStatus('That file could not be read as a board.', true);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+
+  // ---------- Background image ----------
+  const BG_STORAGE_KEY = 'corkboard:background';
+
+  const BG_PRESETS = [
+    { id:'bg1', label:'Background 1', src:'res/bg1.jpg' },
+    { id:'bg2', label:'Background 2', src:'res/bg2.jpg' },
+    { id:'bg3', label:'Background 3', src:'res/bg3.jpg' },
+    { id:'bg4', label:'Background 4', src:'res/bg4.jpg' },
+    { id:'bg5', label:'Background 5', src:'res/bg5.jpg' },
+  ];
+
+  let bgSettings = { type:'none', src:null, opacity:0.6 };
+
+  function applyBackground(){
+    if(bgSettings.type === 'none' || !bgSettings.src){
+      el.bgImage.style.backgroundImage = 'none';
+      el.bgImage.style.opacity = '0';
+    } else {
+      el.bgImage.style.backgroundImage = 'url("' + bgSettings.src + '")';
+      el.bgImage.style.backgroundSize = 'cover';
+      el.bgImage.style.backgroundRepeat = 'no-repeat';
+      el.bgImage.style.opacity = String(bgSettings.opacity);
+    }
+    el.bgOpacity.value = Math.round(bgSettings.opacity * 100);
+    el.bgPresets.querySelectorAll('.bg-preset').forEach(p=>{
+      p.classList.toggle('active', bgSettings.type === 'preset' && p.dataset.id === bgSettings.presetId);
+    });
+  }
+
+  function persistBackground(){
+    try{
+      localStorage.setItem(BG_STORAGE_KEY, JSON.stringify(bgSettings));
+    }catch(err){
+      showStatus('Background set, but too large to remember next time.', true);
+    }
+  }
+
+  function loadBackgroundSetting(){
+    try{
+      const raw = localStorage.getItem(BG_STORAGE_KEY);
+      if(raw) bgSettings = JSON.parse(raw);
+    }catch(err){ /* ignore, use default */ }
+    applyBackground();
+  }
+
+  function buildBackgroundPanel(){
+    BG_PRESETS.forEach(preset=>{
+      const div = document.createElement('div');
+      div.className = 'bg-preset';
+      div.dataset.id = preset.id;
+      div.title = preset.label;
+      div.style.backgroundImage = 'url("' + preset.src + '")';
+      div.addEventListener('click', ()=>{
+        bgSettings = { type:'preset', presetId: preset.id, src: preset.src, opacity: bgSettings.opacity || 0.6 };
+        applyBackground();
+        persistBackground();
+      });
+      el.bgPresets.appendChild(div);
+    });
+  }
+
+  document.getElementById('btn-background').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    el.bgPanel.classList.toggle('show');
+  });
+  document.addEventListener('click', (e)=>{
+    if(!e.target.closest('.bg-panel') && !e.target.closest('#btn-background')){
+      el.bgPanel.classList.remove('show');
+    }
+  });
+
+  // ---------- Utility note menu ----------
+  function buildUtilityMenu(){
+    el.utilMenu.innerHTML = '';
+    Object.keys(UTILITY_TYPES).forEach(key=>{
+      const opt = document.createElement('div');
+      opt.className = 'util-option';
+      opt.textContent = UTILITY_TYPES[key].label;
+      opt.addEventListener('click', ()=>{
+        addUtilityNote(key);
+        el.utilMenu.classList.remove('show');
+      });
+      el.utilMenu.appendChild(opt);
+    });
+  }
+  buildUtilityMenu();
+
+  document.getElementById('btn-add-utility').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    el.utilMenu.classList.toggle('show');
+  });
+  document.addEventListener('click', (e)=>{
+    if(!e.target.closest('.util-menu') && !e.target.closest('#btn-add-utility')){
+      el.utilMenu.classList.remove('show');
+    }
+  });
+
+  document.getElementById('btn-bg-upload').addEventListener('click', ()=>{
+    document.getElementById('bg-upload-input').click();
+  });
+  document.getElementById('bg-upload-input').addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      bgSettings = { type:'upload', src: reader.result, opacity: bgSettings.opacity || 0.6 };
+      applyBackground();
+      persistBackground();
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  });
+
+  el.bgOpacity.addEventListener('input', ()=>{
+    bgSettings.opacity = Number(el.bgOpacity.value) / 100;
+    el.bgImage.style.opacity = String(bgSettings.opacity);
+  });
+  el.bgOpacity.addEventListener('change', persistBackground);
+
+  document.getElementById('btn-bg-clear').addEventListener('click', ()=>{
+    bgSettings = { type:'none', src:null, opacity: bgSettings.opacity || 0.6 };
+    applyBackground();
+    persistBackground();
+    el.bgPanel.classList.remove('show');
+  });
+
+  // ---------- Wiring ----------
+  document.getElementById('btn-new-note').addEventListener('click', addNote);
+  document.getElementById('btn-save').addEventListener('click', saveBoard);
+  document.getElementById('btn-load').addEventListener('click', loadBoard);
+  document.getElementById('btn-delete-board').addEventListener('click', deleteBoard);
+  document.getElementById('btn-new-board').addEventListener('click', newBoard);
+  document.getElementById('btn-export').addEventListener('click', exportBoard);
+  document.getElementById('btn-import').addEventListener('click', importBoard);
+
+  document.addEventListener('click', (e)=>{
+    if(!e.target.closest('.note')) {
+      document.querySelectorAll('.color-menu.show').forEach(m=>m.classList.remove('show'));
+    }
+  });
+
+  window.addEventListener('resize', updateCanvasBounds);
+
+  buildBackgroundPanel();
+  loadBackgroundSetting();
+  refreshBoardList();
+  render();
+
+  // ---------- Info button ----------
+  const infoSound = new Audio('res/sound1.mp3');
+  document.getElementById('btn-info').addEventListener('click', ()=>{
+    infoSound.currentTime = 0;
+    infoSound.play().catch(()=>{ /* browser may block autoplay-like sounds without prior interaction */ });
+  });
+})();
+</script>
+</body>
+</html>
